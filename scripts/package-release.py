@@ -99,6 +99,7 @@ def package(platform):
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
     if len(sys.argv) != 2 or sys.argv[1] not in ("macos", "windows"):
         raise SystemExit("用法：python3 scripts/package-release.py macos|windows")
     package(sys.argv[1])

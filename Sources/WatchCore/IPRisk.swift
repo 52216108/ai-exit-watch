@@ -10,9 +10,9 @@ public struct IPRisk: Codable, Equatable, Sendable {
 
     public static func label(_ value: Bool?) -> String {
         switch value {
-        case true: return "情报库已标记"
-        case false: return "情报库未标记"
-        case nil: return "未知"
+        case .some(true): return "情报库已标记"
+        case .some(false): return "情报库未标记"
+        case .none: return "未知"
         }
     }
 
