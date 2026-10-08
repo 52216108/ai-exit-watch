@@ -1,0 +1,13 @@
+.build/
+dist/
+.DS_Store
+.swiftpm/
+windows/**/bin/
+windows/**/obj/
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.key
+*.mobileprovision

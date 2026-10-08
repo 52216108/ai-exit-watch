@@ -1,0 +1,12 @@
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+*.ps1 text eol=lf
+*.swift text eol=lf
+*.cs text eol=lf
+*.png binary
+*.icns binary
+*.ico binary
+# 本机排查记录留在原开发仓库，不进入首次公开导出。
+VALIDATION.md export-ignore
+windows/VALIDATION.md export-ignore

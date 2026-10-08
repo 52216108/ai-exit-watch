@@ -1,0 +1,24 @@
+name: 问题反馈
+description: 报告检测、界面或兼容性问题，请先脱敏
+body:
+  - type: markdown
+    attributes:
+      value: "不要上传 state.json、代理配置、订阅链接、密码或未脱敏截图。安全漏洞请使用仓库 Security 页面的私密报告。"
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本与操作系统
+      placeholder: "例如：0.3.1 / Windows 11 x64 / 缩放 150%"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 如何复现
+      description: "说明操作步骤、预期结果和实际结果。涉及代理时只描述软件版本与模式，不要贴个人配置。"
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 已脱敏的截图或错误提示

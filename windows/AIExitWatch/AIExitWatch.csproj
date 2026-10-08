@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>AIExitWatch</AssemblyName>
+    <Product>AI落地安全检测</Product>
+    <Description>AI 出口 IP、连通性与固定出口保护工具</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../WatchCore/WatchCore.csproj" />
+    <EmbeddedResource Include="AppIcon.ico" />
+  </ItemGroup>
+</Project>
