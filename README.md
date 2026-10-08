@@ -10,6 +10,21 @@
 
 > 本项目是独立工具，与 Anthropic / OpenAI 无隶属关系。检测正常不代表账号资格、模型访问或平台风控一定正常。首次公开版本为预发布版，Windows 桌面交互仍需更多实机试用。
 
+## 界面预览
+
+以下为实际 **macOS 界面代码离线渲染**的预览。所有 IP、归属地、运营商、节点名、时间和延迟均为示例，不包含个人检测记录；Windows 界面布局有所不同。
+
+| 日常监测 | 出口变化提醒 |
+| --- | --- |
+| <img src="docs/screenshots/dashboard.png" width="420" alt="macOS 日常监测界面：三个 AI 目标共用同一示例出口，显示延迟和 Claude API 链路"> | <img src="docs/screenshots/alert.png" width="420" alt="macOS 异常界面：ChatGPT 示例出口发生变化，逐项显示出口并提醒偏离"> |
+| 同一出口合并展示，延迟逐项查看。 | 出口不同则分别展示；连续两次确认后告警。 |
+
+**多出口对照**：把国内、海外、Cloudflare 参考出口与三个 AI 目标放在一起查看，分流差异一目了然。
+
+<p align="center"><img src="docs/screenshots/comparison.png" width="808" alt="macOS 多出口对照界面：六个目标分别显示示例 IP、中文归属地、延迟和检测来源"></p>
+
+不同目标使用不同 IP 可能是正常分流，不会仅因此触发告警。[截图生成与脱敏说明](docs/screenshots/README.md)。
+
 ## 下载与安装
 
 从 [Releases](https://github.com/52216108/ai-exit-watch/releases) 下载对应系统的 ZIP。GitHub 自动生成的 Source code 压缩包是源码，不是可运行应用。

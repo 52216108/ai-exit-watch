@@ -34,7 +34,9 @@ def package(platform):
         for name in ("LICENSE", "README.md", "PRIVACY.md", "THIRD_PARTY_NOTICES.md"):
             shutil.copy2(ROOT / name, stage / name)
         # README 使用相对链接；同包保留被链接的指南和图标。
-        for name in ("CONTRIBUTING.md", "SECURITY.md", "docs/verification.md", "docs/icon.png", "windows/README.md"):
+        for name in ("CONTRIBUTING.md", "SECURITY.md", "docs/verification.md", "docs/icon.png", "windows/README.md",
+                     "docs/screenshots/README.md", "docs/screenshots/dashboard.png",
+                     "docs/screenshots/alert.png", "docs/screenshots/comparison.png"):
             target = stage / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / name, target)
