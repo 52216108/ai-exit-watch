@@ -4,6 +4,7 @@ import WatchCore
 
 struct Dashboard: View {
     @ObservedObject var model: WatchModel
+    var onHeightChange: ((CGFloat) -> Void)? = nil
     @State private var candidate: Snapshot?
     @State private var confirming = false
     @State private var contentHeight: CGFloat?
@@ -21,7 +22,10 @@ struct Dashboard: View {
         .frame(width: 420, height: min(contentHeight ?? maximumHeight, maximumHeight))
         .onPreferenceChange(DashboardHeightKey.self) { height in
             // 首次布局的空偏好值不能折叠滚动区域，否则内容无法继续测量。
-            if height > 0 { contentHeight = height }
+            if height > 0 {
+                contentHeight = height
+                onHeightChange?(min(height, maximumHeight))
+            }
         }
         .background(.regularMaterial)
         .alert("将以下结果作为正常基准？", isPresented: $confirming) {

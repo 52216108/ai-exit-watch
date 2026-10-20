@@ -215,28 +215,47 @@ final class WindowRouter {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var statusController: StatusController?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        statusController = StatusController(model: WatchModel.shared)
         if !UserDefaults.standard.bool(forKey: "welcomeShown") || CommandLine.arguments.contains("--show-window") {
             WindowRouter.shared.show("welcome")
             UserDefaults.standard.set(true, forKey: "welcomeShown")
         }
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        WindowRouter.shared.show("welcome"); return false
+        statusController?.showPopover(); return false
     }
 }
 
 @main
-struct NetworkWatchApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    @StateObject private var model = WatchModel.shared
-    var body: some Scene {
-        MenuBarExtra {
-            Dashboard(model: model)
-        } label: {
-            Image(systemName: model.icon).renderingMode(.template).accessibilityLabel("AI落地安全检测：\(model.title)")
-        }.menuBarExtraStyle(.window)
+enum NetworkWatchApp {
+    @MainActor static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.setActivationPolicy(.accessory)
+        let menu = NSMenu()
+        let applicationMenu = NSMenu()
+        applicationMenu.addItem(withTitle: "退出 AI落地安全检测", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let applicationItem = NSMenuItem()
+        applicationItem.submenu = applicationMenu
+        menu.addItem(applicationItem)
+        let editMenu = NSMenu(title: "编辑")
+        for (title, action, key) in [
+            ("撤销", "undo:", "z"), ("剪切", "cut:", "x"),
+            ("拷贝", "copy:", "c"), ("粘贴", "paste:", "v"), ("全选", "selectAll:", "a")
+        ] {
+            editMenu.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
+        }
+        let editItem = NSMenuItem()
+        editItem.submenu = editMenu
+        menu.addItem(editItem)
+        app.mainMenu = menu
+        withExtendedLifetime(delegate) { app.run() }
     }
 }
 
