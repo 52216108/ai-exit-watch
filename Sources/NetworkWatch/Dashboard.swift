@@ -6,12 +6,23 @@ struct Dashboard: View {
     @ObservedObject var model: WatchModel
     @State private var candidate: Snapshot?
     @State private var confirming = false
+    @State private var contentHeight: CGFloat?
 
     var body: some View {
+        let maximumHeight = (NSScreen.main?.visibleFrame.height ?? 720) - 40
         ScrollView {
             content
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: DashboardHeightKey.self, value: geometry.size.height)
+                    }
+                }
         }
-        .frame(width: 420, height: min(680, (NSScreen.main?.visibleFrame.height ?? 720) - 40))
+        .frame(width: 420, height: min(contentHeight ?? maximumHeight, maximumHeight))
+        .onPreferenceChange(DashboardHeightKey.self) { height in
+            // 首次布局的空偏好值不能折叠滚动区域，否则内容无法继续测量。
+            if height > 0 { contentHeight = height }
+        }
         .background(.regularMaterial)
         .alert("将以下结果作为正常基准？", isPresented: $confirming) {
             Button("取消", role: .cancel) {}
@@ -247,5 +258,12 @@ struct Dashboard: View {
             Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
                 .help("退出 AI落地安全检测").accessibilityLabel("退出 AI落地安全检测")
         }.font(.system(size: 12)).buttonStyle(.plain).foregroundStyle(.secondary)
+    }
+}
+
+private struct DashboardHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
