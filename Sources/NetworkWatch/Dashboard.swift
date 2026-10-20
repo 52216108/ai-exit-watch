@@ -8,6 +8,20 @@ struct Dashboard: View {
     @State private var confirming = false
 
     var body: some View {
+        ScrollView {
+            content
+        }
+        .frame(width: 420, height: min(680, (NSScreen.main?.visibleFrame.height ?? 720) - 40))
+        .background(.regularMaterial)
+        .alert("将以下结果作为正常基准？", isPresented: $confirming) {
+            Button("取消", role: .cancel) {}
+            Button("确认") { if let candidate { model.acceptBaseline(candidate) } }
+        } message: {
+            Text((candidate?.endpoints.map { "\($0.host)\n\($0.ip ?? "未知") · \(GeoPresentation.country($0.country))" }.joined(separator: "\n\n") ?? "") + "\n\n这会替换旧基准；后续变化将与此比较。")
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
             if let sample = model.latest {
@@ -53,12 +67,6 @@ struct Dashboard: View {
             footer
         }.padding(20).frame(width: 420)
             .fixedSize(horizontal: false, vertical: true)
-            .alert("将以下结果作为正常基准？", isPresented: $confirming) {
-                Button("取消", role: .cancel) {}
-                Button("确认") { if let candidate { model.acceptBaseline(candidate) } }
-            } message: {
-                Text((candidate?.endpoints.map { "\($0.host)\n\($0.ip ?? "未知") · \(GeoPresentation.country($0.country))" }.joined(separator: "\n\n") ?? "") + "\n\n这会替换旧基准；后续变化将与此比较。")
-            }
     }
 
     private var header: some View {
@@ -163,7 +171,7 @@ struct Dashboard: View {
             if endpoint.error != nil { Image(systemName: "exclamationmark.circle") }
             Text(endpoint.milliseconds.map { "\($0) ms" } ?? "未连通").monospacedDigit()
         }.font(.system(size: 11))
-            .foregroundStyle(endpoint.error != nil || (endpoint.milliseconds ?? 0) > model.saved.settings.slowMilliseconds ? Color.orange : Color.secondary)
+            .foregroundStyle(endpoint.error != nil ? Color.orange : Color.secondary)
     }
 
     private func chain(_ sample: Snapshot) -> some View {
@@ -187,11 +195,18 @@ struct Dashboard: View {
         if let error = model.error {
             Text(error).font(.caption).foregroundStyle(.red)
         }
-        let visible = model.issues.isEmpty ? model.active : model.issues
+        let visible = model.issues + model.active.filter { active in !model.issues.contains { $0.id == active.id } }.map { active in
+            let host = active.id.dropFirst("ip:".count)
+            let unavailable = model.issues.contains { $0.id == "network:\(host)" }
+            return Issue(active.id, unavailable ? active.message : "本轮 IP 已回到基准，等待下一轮确认恢复：\(active.message)")
+        }
         if !visible.isEmpty {
             ScrollView {
                 VStack(alignment: .leading, spacing: 5) {
-                    ForEach(visible, id: \.id) { Text($0.message).font(.caption).foregroundStyle(.orange) }
+                    ForEach(visible, id: \.id) { issue in
+                        Text(issue.message)
+                            .font(.caption).foregroundStyle(.orange)
+                    }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(height: min(CGFloat(visible.count) * 32, 96))
         }

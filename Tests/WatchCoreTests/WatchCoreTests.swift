@@ -52,11 +52,11 @@ final class WatchCoreTests: XCTestCase {
 
     func testIndependentConfirmationDedupAndRecovery() {
         var machine = AlertMachine()
-        let failure = Issue("network:claude.ai", "连接超时")
+        let failure = Issue("ip:claude.ai", "网页出口变化")
         XCTAssertTrue(machine.consume([failure]).isEmpty)
         XCTAssertEqual(machine.consume([failure]).count, 1)
         XCTAssertTrue(machine.consume([failure]).isEmpty)
-        let slow = Issue("slow:api.anthropic.com", "延迟较高")
+        let slow = Issue("ip:api.anthropic.com", "API 出口变化")
         XCTAssertTrue(machine.consume([failure, slow]).isEmpty)
         XCTAssertEqual(machine.consume([failure, slow]).count, 1)
         XCTAssertTrue(machine.consume([]).isEmpty)
@@ -67,7 +67,7 @@ final class WatchCoreTests: XCTestCase {
 
     func testTransientFailureAndPauseDoNotCountAsConsecutive() {
         var machine = AlertMachine()
-        let issue = Issue("network:claude.ai", "连接失败")
+        let issue = Issue("ip:claude.ai", "出口变化")
         XCTAssertTrue(machine.consume([issue]).isEmpty)
         XCTAssertTrue(machine.consume([]).isEmpty)
         XCTAssertTrue(machine.consume([issue]).isEmpty)
@@ -87,21 +87,49 @@ final class WatchCoreTests: XCTestCase {
         XCTAssertTrue(events.isEmpty)
     }
 
-    func testMissingGeoAndChainDoNotProduceFalseRecovery() {
+    func testOnlyIPChangesTriggerAlerts() {
         var machine = AlertMachine()
-        let asn = Issue("asn:claude.ai:1234", "ASN 变化")
-        let chain = Issue("chain:route", "链路变化")
-        _ = machine.consume([asn, chain]); _ = machine.consume([asn, chain])
-        let missing = [Issue("geo-unavailable:claude.ai", "未知"), Issue("chain-unavailable", "未知")]
-        _ = machine.consume(missing); _ = machine.consume(missing); _ = machine.consume(missing)
-        XCTAssertNotNil(machine.active[asn.id]); XCTAssertNotNil(machine.active[chain.id])
+        let informational = [
+            Issue("slow:claude.ai", "延迟较高"), Issue("asn:claude.ai", "ASN 变化"),
+            Issue("chain:claude", "链路变化"), Issue("chain-unavailable", "链路未知"),
+            Issue("network:claude.ai", "出口未知")
+        ]
+        for _ in 0..<3 { XCTAssertTrue(machine.consume(informational).isEmpty) }
+        XCTAssertTrue(machine.active.isEmpty)
+    }
+
+    func testSlowRequestsAndMetadataChangesDoNotCountAsIPChanges() {
+        var settings = WatchSettings(); settings.chainEnabled = true
+        let baseline = Snapshot(endpoints: [Endpoint(host: "claude.ai", ip: "1.1.1.1", country: "US", milliseconds: 100)],
+                                geo: ["1.1.1.1": Geo(ip: "1.1.1.1", country: "US", asn: 1, isp: "旧")],
+                                chains: ["claude.ai: 旧链路"])
+        var sample = baseline
+        sample.endpoints[0].milliseconds = 9000
+        sample.endpoints[0].country = "DE"
+        sample.geo["1.1.1.1"] = Geo(ip: "1.1.1.1", country: "DE", asn: 2, isp: "新")
+        sample.chains = ["claude.ai: 新链路"]
+        XCTAssertTrue(Comparison.issues(sample, baseline: baseline, settings: settings).isEmpty)
+        sample.geo = [:]; sample.chains = nil; sample.chainError = "链路未知"
+        XCTAssertTrue(Comparison.issues(sample, baseline: baseline, settings: settings).isEmpty)
+    }
+
+    func testUnknownInterruptsConsecutiveRecoveryWithoutNewAlarm() {
+        var machine = AlertMachine()
+        let changed = Issue("ip:claude.ai", "出口变化")
+        _ = machine.consume([changed]); _ = machine.consume([changed])
+        XCTAssertTrue(machine.consume([]).isEmpty)
+        XCTAssertTrue(machine.consume([Issue("network:claude.ai", "未知")]).isEmpty)
+        XCTAssertTrue(machine.consume([]).isEmpty)
+        XCTAssertNotNil(machine.active[changed.id])
+        XCTAssertEqual(machine.consume([]).count, 1)
+        XCTAssertTrue(machine.active.isEmpty)
     }
 
     func testComparisonChecksBothRoutesAndDoesNotMutateBaseline() {
         let old = Snapshot(endpoints: [Endpoint(host: "claude.ai", ip: "1.1.1.1", country: "US", milliseconds: 100), Endpoint(host: "api.anthropic.com", ip: "1.1.1.1", country: "US", milliseconds: 100)], geo: ["1.1.1.1": Geo(ip: "1.1.1.1", country: "US", asn: 1, isp: "baseline")])
         let new = Snapshot(endpoints: [Endpoint(host: "claude.ai", ip: "1.1.1.1", country: "US", milliseconds: 100), Endpoint(host: "api.anthropic.com", ip: "8.8.8.8", country: "DE", milliseconds: 5000)], geo: ["1.1.1.1": old.geo["1.1.1.1"]!, "8.8.8.8": Geo(ip: "8.8.8.8", country: "DE", asn: 2, isp: "changed")])
         let issues = Comparison.issues(new, baseline: old, settings: WatchSettings())
-        XCTAssertEqual(issues.count, 5)
+        XCTAssertEqual(issues.map(\.id), ["ip:api.anthropic.com"])
         XCTAssertTrue(issues.allSatisfy { $0.id.contains("api.anthropic.com") })
         XCTAssertEqual(old.endpoints.last?.ip, "1.1.1.1")
     }
@@ -110,11 +138,11 @@ final class WatchCoreTests: XCTestCase {
         let endpoints = [Endpoint(host: "claude.ai", ip: "1.1.1.1", country: "US"), Endpoint(host: "api.anthropic.com", error: "失败")]
         XCTAssertFalse(Snapshot(endpoints: endpoints).canBaseline(settings: WatchSettings()))
         var sample = Snapshot(endpoints: [endpoints[0], Endpoint(host: "api.anthropic.com", ip: "1.1.1.1", country: "US"), Endpoint(host: "chatgpt.com", ip: "1.1.1.1", country: "US")])
-        XCTAssertFalse(sample.canBaseline(settings: WatchSettings()))
+        XCTAssertTrue(sample.canBaseline(settings: WatchSettings()))
         sample.geo["1.1.1.1"] = Geo(ip: "1.1.1.1", country: "US", asn: 1, isp: "test")
         XCTAssertTrue(sample.canBaseline(settings: WatchSettings()))
         var settings = WatchSettings(); settings.chainEnabled = true
-        XCTAssertFalse(sample.canBaseline(settings: settings))
+        XCTAssertTrue(sample.canBaseline(settings: settings))
     }
 
     func testOldClaudeBaselineRemainsReadableAndRequiresChatGPTConfirmation() throws {
@@ -150,7 +178,7 @@ final class WatchCoreTests: XCTestCase {
         XCTAssertEqual(unavailable.map(\.id), ["network:chatgpt.com"])
         _ = machine.consume(unavailable); _ = machine.consume(unavailable)
         XCTAssertNotNil(machine.active["ip:chatgpt.com"])
-        XCTAssertNotNil(machine.active["network:chatgpt.com"])
+        XCTAssertNil(machine.active["network:chatgpt.com"])
         sample.endpoints[2] = baseline.endpoints[0]
         XCTAssertFalse(sample.canBaseline(settings: settings), "重复 Claude 结果不能替代 ChatGPT 出口")
     }

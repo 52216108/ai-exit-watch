@@ -181,32 +181,50 @@ public enum ChainReader {
     public static func observe(enabled: Bool, socketPath: String) async -> (chains: [String]?, paths: [String]?, error: String?) {
         guard enabled else { return (nil, nil, nil) }
         if let error = configurationError(socketPath: socketPath) { return (nil, nil, error) }
-        return await Task.detached {
-            var chains: Set<String> = []
-            do {
-                for _ in 0..<4 {
-                    let data = try read(socketPath: socketPath, endpoint: "connections")
-                    struct Reply: Decodable {
-                        struct Connection: Decodable {
-                            struct Metadata: Decodable { var host: String }
-                            var metadata: Metadata; var chains: [String]
-                        }
-                        var connections: [Connection]
+        let observation = Task.detached {
+            await observe { endpoint in try read(socketPath: socketPath, endpoint: endpoint) }
+        }
+        return await withTaskCancellationHandler {
+            await observation.value
+        } onCancel: {
+            observation.cancel()
+        }
+    }
+
+    // 覆盖探测请求的 12 秒资源超时；捕获齐后提前结束，不复用上一轮链路。
+    static func observe(timeout: Duration = .seconds(12), pollingInterval: Duration = .milliseconds(100),
+                        read: @Sendable (String) throws -> Data) async -> (chains: [String]?, paths: [String]?, error: String?) {
+        var chains: Set<String> = []
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        do {
+            while ContinuousClock.now < deadline {
+                try Task.checkCancellation()
+                let data = try read("connections")
+                struct Reply: Decodable {
+                    struct Connection: Decodable {
+                        struct Metadata: Decodable { var host: String }
+                        var metadata: Metadata; var chains: [String]
                     }
-                    let reply = try JSONDecoder().decode(Reply.self, from: data)
-                    for connection in reply.connections where ["claude.ai", "api.anthropic.com"].contains(connection.metadata.host) && !connection.chains.isEmpty {
-                        chains.insert(connection.metadata.host + ": " + connection.chains.joined(separator: " → "))
-                    }
-                    try await Task.sleep(nanoseconds: 200_000_000)
+                    var connections: [Connection]
+                }
+                let reply = try JSONDecoder().decode(Reply.self, from: data)
+                for connection in reply.connections where ["claude.ai", "api.anthropic.com"].contains(connection.metadata.host) && !connection.chains.isEmpty {
+                    chains.insert(connection.metadata.host + ": " + connection.chains.joined(separator: " → "))
                 }
                 let complete = ["claude.ai", "api.anthropic.com"].allSatisfy { host in chains.contains { $0.hasPrefix(host + ": ") } }
-                guard complete else { return (nil, nil, "未完整捕获网页和 API 活动连接，链路未知") }
-                struct ProxiesReply: Decodable { var proxies: [String: ProxyRouteInfo] }
-                // 只读补充展示信息；无法补充时明确显示未知，不影响原始链路监测。
-                let proxies = try? JSONDecoder().decode(ProxiesReply.self, from: read(socketPath: socketPath, endpoint: "proxies")).proxies
-                let ordered = chains.sorted()
-                return (ordered, ordered.map { ChainPresentation.describe($0, proxies: proxies) }, nil)
-            } catch { return (nil, nil, Detector.describe(error)) }
-        }.value
+                if complete {
+                    struct ProxiesReply: Decodable { var proxies: [String: ProxyRouteInfo] }
+                    // 只读补充展示信息；无法补充时明确显示未知，不影响原始链路监测。
+                    let proxies = try? JSONDecoder().decode(ProxiesReply.self, from: read("proxies")).proxies
+                    try Task.checkCancellation()
+                    let ordered = chains.sorted()
+                    return (ordered, ordered.map { ChainPresentation.describe($0, proxies: proxies) }, nil)
+                }
+                try await Task.sleep(for: min(pollingInterval, ContinuousClock.now.duration(to: deadline)))
+            }
+            return (nil, nil, "本轮未完整捕获 Claude 网页和 API 活动连接，链路未知；不代表出口已变化")
+        } catch is CancellationError {
+            return (nil, nil, "检测已取消")
+        } catch { return (nil, nil, Detector.describe(error)) }
     }
 }

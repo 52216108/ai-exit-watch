@@ -64,14 +64,13 @@ public struct Snapshot: Codable, Sendable {
             .map { Endpoint(host: $0).displayName }
     }
     public func canBaseline(settings: WatchSettings) -> Bool {
-        hasAllTargets && endpoints.allSatisfy { $0.error == nil && $0.ip != nil && (!settings.geoEnabled || geo[$0.ip!] != nil) }
-            && (!settings.chainEnabled || chains?.isEmpty == false)
+        hasAllTargets && endpoints.allSatisfy { $0.error == nil && $0.ip != nil }
     }
 }
 
 public struct WatchSettings: Codable, Equatable, Sendable {
     public var interval: Double = 60
-    public var slowMilliseconds: Int = 3000
+    public var slowMilliseconds: Int = 3000 // 保留旧设置兼容性；延迟不再参与异常判定。
     public var geoEnabled: Bool = true
     public var chainEnabled: Bool = false
     public var socketPath: String = ""
@@ -81,6 +80,7 @@ public struct WatchSettings: Codable, Equatable, Sendable {
 public struct Issue: Codable, Equatable, Sendable {
     public var id: String
     public var message: String
+    public var isIPChange: Bool { id.hasPrefix("ip:") }
     public init(_ id: String, _ message: String) { self.id = id; self.message = message }
 }
 
@@ -94,23 +94,7 @@ public enum Comparison {
             }
             if let previous = baseline?.endpoints.first(where: { $0.host == host }) {
                 if let old = previous.ip, old != ip { issues.append(Issue("ip:\(host)", "\(host) 出口变化：\(old) → \(ip)")) }
-                if let old = previous.country, let new = endpoint.country, old != new {
-                    issues.append(Issue("country:\(host)", "\(host) 探测地区变化：\(GeoPresentation.country(old)) → \(GeoPresentation.country(new))"))
-                }
-                if settings.geoEnabled, let oldIP = previous.ip, let oldGeo = baseline?.geo[oldIP], let newGeo = sample.geo[ip] {
-                    if oldGeo.asn != newGeo.asn { issues.append(Issue("asn:\(host)", "\(host) ASN 变化：AS\(oldGeo.asn) → AS\(newGeo.asn)")) }
-                    if oldGeo.country != newGeo.country { issues.append(Issue("geo:\(host)", "\(host) IP 库地区变化：\(GeoPresentation.country(oldGeo.country)) → \(GeoPresentation.country(newGeo.country))")) }
-                }
             }
-            if settings.geoEnabled && sample.geo[ip] == nil { issues.append(Issue("geo-unavailable:\(host)", "\(host) IP 属性未知：\(sample.geoErrors[ip] ?? "无数据")")) }
-            if let latency = endpoint.milliseconds, latency > settings.slowMilliseconds {
-                issues.append(Issue("slow:\(host)", "\(host) 延迟 \(latency) ms，超过 \(settings.slowMilliseconds) ms"))
-            }
-        }
-        if settings.chainEnabled {
-            if let chains = sample.chains, !chains.isEmpty {
-                if let old = baseline?.chains, old != chains { issues.append(Issue("chain:claude", "观察到的 Claude 链路变化：\(chains.joined(separator: "；"))")) }
-            } else { issues.append(Issue("chain-unavailable", sample.chainError ?? "未捕获 Claude 连接，代理链路未知")) }
         }
         return issues
     }
@@ -124,7 +108,7 @@ public struct AlertEvent: Codable, Identifiable, Sendable {
     public init(title: String, message: String) { self.title = title; self.message = message }
 }
 
-// 每项异常独立计数；新异常不延迟已有告警，缺失数据不会被判作恢复。
+// 仅 IP 变化触发告警；未取到 IP 只阻止恢复确认，不触发新告警。
 public struct AlertMachine: Sendable {
     private var streak: [String: Int] = [:]
     private var clearStreak: [String: Int] = [:]
@@ -132,7 +116,8 @@ public struct AlertMachine: Sendable {
     public init() {}
     public mutating func resetPending() { streak = [:]; clearStreak = [:] }
     public mutating func consume(_ issues: [Issue]) -> [AlertEvent] {
-        let current = Dictionary(issues.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let observations = Dictionary(issues.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let current = observations.filter { $0.value.isIPChange }
         streak = streak.filter { current[$0.key] != nil }
         var started: [String] = [], ended: [String] = []
         for (id, issue) in current {
@@ -141,18 +126,16 @@ public struct AlertMachine: Sendable {
             if active[id] != nil { active[id] = issue }
         }
         for (id, issue) in active where current[id] == nil {
-            // 同一目标未能取数时，不能宣称其 IP/ASN/地区/链路偏离恢复。
+            // 同一目标未能取数时，不能宣称其 IP 已回到基准。
             let host = id.split(separator: ":").dropFirst().first.map(String.init)
-            let blocked = (host != nil && current["network:\(host!)"] != nil)
-                || ((id.hasPrefix("asn:") || id.hasPrefix("geo:")) && host != nil && current["geo-unavailable:\(host!)"] != nil)
-                || (id.hasPrefix("chain:") && current["chain-unavailable"] != nil)
+            let blocked = host != nil && observations["network:\(host!)"] != nil
             if blocked { clearStreak[id] = nil; continue }
             clearStreak[id, default: 0] += 1
             if clearStreak[id, default: 0] >= 2 { active[id] = nil; clearStreak[id] = nil; ended.append(issue.message) }
         }
         var events: [AlertEvent] = []
-        if !started.isEmpty { events.append(AlertEvent(title: "网络监测发现异常", message: started.sorted().joined(separator: "\n"))) }
-        if !ended.isEmpty { events.append(AlertEvent(title: "部分检测项已恢复或变化", message: "以下先前异常已连续两次不再出现：\n" + ended.sorted().joined(separator: "\n"))) }
+        if !started.isEmpty { events.append(AlertEvent(title: "出口 IP 已变化", message: started.sorted().joined(separator: "\n"))) }
+        if !ended.isEmpty { events.append(AlertEvent(title: "出口 IP 已恢复", message: "以下出口已连续两次回到基准：\n" + ended.sorted().joined(separator: "\n"))) }
         return events
     }
 }

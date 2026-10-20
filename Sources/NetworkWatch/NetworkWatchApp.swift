@@ -54,12 +54,13 @@ final class WatchModel: ObservableObject {
         if sleeping { return "休眠暂停" }
         if paused { return "监控已暂停" }
         if error != nil { return "需要处理" }
-        if !active.isEmpty { return "检测异常" }
-        if !issues.isEmpty { return "异常待复核" }
+        if !active.isEmpty { return issues.isEmpty ? "IP 恢复待确认" : "出口 IP 已变化" }
+        if issues.contains(where: \.isIPChange) { return "IP 变化待复核" }
+        if !issues.isEmpty { return "出口 IP 未知" }
         if saved.baseline == nil { return "待确认正常基准" }
         if latest == nil { return "正在检测" }
         if let baseline = saved.baseline, !baseline.missingBaselineNames.isEmpty { return "新增出口待确认基准" }
-        return "与基准一致"
+        return "出口 IP 与基准一致"
     }
     var icon: String {
         if paused || sleeping { return "pause.circle" }
@@ -141,10 +142,6 @@ final class WatchModel: ObservableObject {
             return false
         }
         var proposed = saved
-        if settings.geoEnabled != saved.settings.geoEnabled || settings.chainEnabled != saved.settings.chainEnabled || settings.socketPath != saved.settings.socketPath {
-            proposed.baseline = nil
-            proposed.events.append(AlertEvent(title: "检测范围已调整", message: "请重新确认正常基准。"))
-        }
         proposed.settings = settings
         do { try store.write(proposed) } catch { self.error = "设置保存失败，原设置保持不变。"; return false }
         saved = proposed; machine = AlertMachine(); active = []; issues = []; latest = nil; error = nil
@@ -253,10 +250,7 @@ struct SettingsView: View {
                 Picker("检测间隔", selection: $draft.interval) {
                     Text("1 分钟").tag(60.0); Text("2 分钟").tag(120.0); Text("5 分钟").tag(300.0); Text("10 分钟").tag(600.0)
                 }
-                Picker("持续延迟告警", selection: $draft.slowMilliseconds) {
-                    Text("超过 1 秒").tag(1000); Text("超过 3 秒").tag(3000); Text("超过 5 秒").tag(5000)
-                }
-                Text("异常和恢复均连续两次确认；同一异常持续期间只提醒一次。休眠暂停，唤醒立即检测。")
+                Text("仅出口 IP 相对基准发生变化时告警；变化和恢复均连续两次确认。延迟、归属地及链路只供查看，检测失败显示未知，不触发新告警，也不判定已有变化已恢复。休眠暂停，唤醒立即检测。")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Text("系统通知：\(model.notifications)")
@@ -288,10 +282,10 @@ struct SettingsView: View {
                         Button("自动查找") { draft.socketPath = ChainReader.suggestedSocket(configuredPath: draft.socketPath) }
                     }
                     Text("填写路径后点击“保存设置”才会生效。").font(.caption).foregroundStyle(.secondary)
-                    Text("仅读取本地 /connections，不读取密码、不修改代理。连接捕获可能不完整；缺失会显示未知并告警，不能证明所有 Claude 请求的路由。")
+                    Text("仅读取本地 /connections，不读取密码、不修改代理。连接捕获可能不完整；缺失显示未知，不触发异常告警，也不能证明所有 Claude 请求的路由。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Text("更改数据来源后需要重新确认正常基准。连通检测不验证账户权限、模型服务或官方风控。")
+                Text("归属地和链路设置不影响 IP 基准。连通检测不验证账户权限、模型服务或官方风控。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
