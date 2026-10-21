@@ -199,10 +199,24 @@ struct Dashboard: View {
                 Spacer()
                 Text("Mihomo").font(.system(size: 10)).foregroundStyle(.tertiary)
             }
-            Text(model.saved.settings.chainEnabled ? (path ?? raw ?? sample.chainError ?? "未捕获链路") : "未启用 · 在设置中接入本地 socket")
-                .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-                .help("前置节点按当前运行配置补充；仅观察，不修改代理。")
+            if model.saved.settings.chainEnabled, let observed = path ?? raw {
+                Text(observed)
+                    .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    .help("前置节点按当前运行配置补充；仅观察，不修改代理。")
+            } else {
+                Text(model.saved.settings.chainEnabled ? "暂无法观测 · 不影响出口 IP 检测" : "未接入 · 不影响出口 IP 检测")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("使用软路由或路由器代理时，本机可能无法读取中转节点；链路不可观测不代表网络故障。")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if model.saved.settings.chainEnabled, let reason = sample.chainError {
+                    DisclosureGroup("查看观测详情") {
+                        Text(reason).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }.font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
         }
     }
 

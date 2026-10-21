@@ -291,14 +291,16 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Text("多出口对照每轮另访问 ip.3322.net、checkip.amazonaws.com 和 www.cloudflare.com，读取对方看到的公网 IP；参考出口仅查询归属地，不参与基准告警。")
                     .font(.caption).foregroundStyle(.secondary)
-                Toggle("观察 Mihomo 中的 Claude 活动连接链路", isOn: $draft.chainEnabled)
-                if let message = ChainReader.configurationError(socketPath: draft.socketPath) {
-                    Text("当前未接入：\(message)").font(.caption).foregroundStyle(.orange)
-                }
+                Toggle("观察本机 Mihomo 中的 Claude 活动连接链路（可选）", isOn: $draft.chainEnabled)
+                Text("使用软路由或路由器代理时，可保持关闭。出口 IP 检测、基准确认和 IP 变化告警不依赖链路观察。")
+                    .font(.caption).foregroundStyle(.secondary)
                 if draft.chainEnabled {
                     HStack {
                         TextField("本地 Unix socket 绝对路径", text: $draft.socketPath)
                         Button("自动查找") { draft.socketPath = ChainReader.suggestedSocket(configuredPath: draft.socketPath) }
+                    }
+                    if let message = ChainReader.configurationError(socketPath: draft.socketPath) {
+                        Text("当前未接入：\(message)").font(.caption).foregroundStyle(.secondary)
                     }
                     Text("填写路径后点击“保存设置”才会生效。").font(.caption).foregroundStyle(.secondary)
                     Text("仅读取本地 /connections，不读取密码、不修改代理。连接捕获可能不完整；缺失显示未知，不触发异常告警，也不能证明所有 Claude 请求的路由。")
