@@ -29,6 +29,8 @@
 
 从 [Releases](https://github.com/52216108/ai-exit-watch/releases) 下载对应系统的 ZIP。GitHub 自动生成的 Source code 压缩包是源码，不是可运行应用。
 
+macOS 最新预发布版为 [v0.3.2](https://github.com/52216108/ai-exit-watch/releases/tag/v0.3.2)，包含软路由场景的链路提示修复；Windows 请继续下载 [v0.3.1](https://github.com/52216108/ai-exit-watch/releases/tag/v0.3.1)。
+
 | 平台 | 下载文件 | 运行方式 |
 | --- | --- | --- |
 | macOS 13+，Apple Silicon / Intel | AI-Exit-Watch-版本-macOS-universal.zip | 解压后把应用拖入“应用程序”，再打开 |
@@ -37,7 +39,7 @@
 同页提供 SHA256SUMS.txt。下载后可核对：
 
     # macOS，使用对应 ZIP 文件名
-    shasum -a 256 AI-Exit-Watch-0.3.1-macOS-universal.zip
+    shasum -a 256 AI-Exit-Watch-0.3.2-macOS-universal.zip
 
     # Windows PowerShell
     Get-FileHash .\AI-Exit-Watch-0.3.1-Windows-x64.zip -Algorithm SHA256
